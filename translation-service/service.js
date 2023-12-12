@@ -7,7 +7,6 @@
 // them in order to use it.
 //
 // In your own projects, files, and code, you can play with @ts-check as well.
-
 export class TranslationService {
   /**
    * Creates a new service
@@ -16,7 +15,6 @@ export class TranslationService {
   constructor(api) {
     this.api = api;
   }
-
   /**
    * Attempts to retrieve the translation for the given text.
    *
@@ -27,9 +25,8 @@ export class TranslationService {
    * @returns {Promise<string>}
    */
   free(text) {
-    throw new Error('Implement the free function');
+    return this.api.fetch(text).then((result) => result.translation)
   }
-
   /**
    * Batch translates the given texts using the free service.
    *
@@ -41,9 +38,12 @@ export class TranslationService {
    * @returns {Promise<string[]>}
    */
   batch(texts) {
-    throw new Error('Implement the batch function');
+    if (texts.length === 0) {
+      return Promise.reject(new BatchIsEmpty())
+    }
+    
+    return Promise.all(texts.map(this.free.bind(this)))
   }
-
   /**
    * Requests the service for some text to be translated.
    *
@@ -54,9 +54,16 @@ export class TranslationService {
    * @returns {Promise<void>}
    */
   request(text) {
-    throw new Error('Implement the request function');
+    const promisify = () => new Promise((resolve, reject) => {
+      this.api.request(text, (result) => {
+        result ? reject(result) : resolve();
+      })
+    })
+    
+    return promisify()  //   try
+      .catch(promisify) // retry one
+      .catch(promisify) // retry two
   }
-
   /**
    * Retrieves the translation for the given text
    *
@@ -68,10 +75,21 @@ export class TranslationService {
    * @returns {Promise<string>}
    */
   premium(text, minimumQuality) {
-    throw new Error('Implement the premium function');
+   return this.api.fetch(text)
+      .catch(() => {
+        // When it fails to fetch, request it.
+        // When the request passes, fetch it again.
+        return this.request(text).then(() => this.api.fetch(text))
+      })
+      .then((result) => {
+        if (result.quality < minimumQuality) {
+          throw new QualityThresholdNotMet()
+        }
+        return result.translation
+      })
   }
+  
 }
-
 /**
  * This error is used to indicate a translation was found, but its quality does
  * not meet a certain threshold. Do not change the name of this error.
@@ -84,13 +102,11 @@ export class QualityThresholdNotMet extends Error {
     super(
       `
 The translation of ${text} does not meet the requested quality threshold.
-    `.trim(),
+    `.trim()
     );
-
     this.text = text;
   }
 }
-
 /**
  * This error is used to indicate the batch service was called without any
  * texts to translate (it was empty). Do not change the name of this error.
@@ -100,7 +116,7 @@ export class BatchIsEmpty extends Error {
     super(
       `
 Requested a batch translation, but there are no texts in the batch.
-    `.trim(),
+    `.trim()
     );
   }
 }
